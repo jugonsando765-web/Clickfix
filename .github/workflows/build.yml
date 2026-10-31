@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-       - uses: geode-sdk/build-geode-mod@main
+      - uses: geode-sdk/build-geode-mod@main
          with:
           combine: true
           sdk: nightly
@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: geode-sdk/build-geode-mod/combine@main
         id: build
-     - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: Build Output
           path: ${{ steps.build.outputs.build-output }}
