@@ -1,0 +1,53 @@
+{
+	"geode": "4.0.0",
+	"gd": {
+		"win": "2.2074",
+		"android": "2.2074",
+		"mac": "2.2074",
+		"ios": "2.2074"
+	},
+	"id": "tuusuario.clickfix",
+	"name": "Click Fix",
+	"version": "v1.0.0",
+	"developer": "TuUsuario",
+	"description": "Corrige clicks y spam en todos los vehículos. Modos: Agresivo y Balanceado.",
+	"settings": {
+		"mode": {
+			"name": "Modo",
+			"description": "Apagado: sin ayuda. Balanceado: te corrige un poco, sigues dependiendo de ti. Agresivo: aunque espamees no mueres.",
+			"type": "string",
+			"default": "Balanceado",
+			"one-of": ["Apagado", "Balanceado", "Agresivo"]
+		},
+		"balanced-window": {
+			"name": "Balanceado: ventana de click (ms)",
+			"description": "Solo te salva si hiciste click hace menos de este tiempo.",
+			"type": "int",
+			"default": 120,
+			"min": 20,
+			"max": 500,
+			"control": { "slider": true, "input": true }
+		},
+		"balanced-max-saves": {
+			"name": "Balanceado: salvadas por intento",
+			"description": "Máximo de veces que te corrige en un mismo intento.",
+			"type": "int",
+			"default": 3,
+			"min": 1,
+			"max": 20,
+			"control": { "slider": true, "input": true }
+		},
+		"aggressive-require-click": {
+			"name": "Agresivo: requiere estar clickeando",
+			"description": "Si está activo, el modo agresivo solo te salva mientras espameas. Si no, te salva siempre.",
+			"type": "bool",
+			"default": true
+		},
+		"safe-mode": {
+			"name": "Modo seguro",
+			"description": "Los intentos asistidos no cuentan al completar el nivel (no se guarda progreso).",
+			"type": "bool",
+			"default": true
+		}
+	}
+}
