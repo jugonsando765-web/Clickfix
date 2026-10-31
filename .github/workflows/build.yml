@@ -15,7 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: geode-sdk/build-geode-mod@main
+       - uses: geode-sdk/build-geode-mod@main
+         with:
          with:
           combine: true
           sdk: nightly
