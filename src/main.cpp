@@ -3,41 +3,83 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/ui/Notification.hpp>
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 
 using namespace geode::prelude;
 
 namespace {
 	using Clock = std::chrono::steady_clock;
 
-	struct State {
-		Clock::time_point lastClick = Clock::time_point::min();
-		Clock::time_point lastSave = Clock::time_point::min();
-		bool clicking = false;
-		int saves = 0;
-		bool assisted = false;
-
-		// Prediccion (Principal)
-		bool simulating = false;     // estamos simulando hacia adelante
-		bool simDied = false;        // la simulacion termino en muerte
-		int internalCalls = 0;       // clicks que mete el propio mod
-		int corrections = 0;         // correcciones en este intento
-		bool correcting = false;     // estamos en medio de una correccion
-	};
-	State g;
+	enum Level { LvOff = 0, LvBalanced = 1, LvAggressive = 2 };
 
 	long long msSince(Clock::time_point t) {
 		if (t == Clock::time_point::min()) return 1000000;
 		return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - t).count();
 	}
 
-	std::string getMode() {
-		return Mod::get()->getSettingValue<std::string>("mode");
+	// Ajustes en cache: antes se leian como strings en CADA frame.
+	struct Config {
+		int principal = LvOff;
+		int secondary = LvOff;
+		int principalBalancedMs = 60;
+		int principalBalancedMax = 5;
+		int principalAggressiveMs = 120;
+		int balancedWindow = 120;
+		int balancedMaxSaves = 3;
+		bool aggressiveRequireClick = true;
+		bool safeMode = true;
+	};
+	Config cfg;
+	Clock::time_point cfgStamp = Clock::time_point::min();
+
+	int parseLevel(std::string const& s) {
+		if (s == "Balanceado") return LvBalanced;
+		if (s == "Agresivo") return LvAggressive;
+		return LvOff;
 	}
 
-	std::string getPrincipalMode() {
-		return Mod::get()->getSettingValue<std::string>("principal-mode");
+	void refreshConfig() {
+		auto mod = Mod::get();
+		cfg.principal = parseLevel(mod->getSettingValue<std::string>("principal-mode"));
+		cfg.secondary = parseLevel(mod->getSettingValue<std::string>("mode"));
+		cfg.principalBalancedMs = static_cast<int>(mod->getSettingValue<int64_t>("principal-balanced-ms"));
+		cfg.principalBalancedMax = static_cast<int>(mod->getSettingValue<int64_t>("principal-balanced-max"));
+		cfg.principalAggressiveMs = static_cast<int>(mod->getSettingValue<int64_t>("principal-aggressive-ms"));
+		cfg.balancedWindow = static_cast<int>(mod->getSettingValue<int64_t>("balanced-window"));
+		cfg.balancedMaxSaves = static_cast<int>(mod->getSettingValue<int64_t>("balanced-max-saves"));
+		cfg.aggressiveRequireClick = mod->getSettingValue<bool>("aggressive-require-click");
+		cfg.safeMode = mod->getSettingValue<bool>("safe-mode");
+		cfgStamp = Clock::now();
 	}
+
+	void ensureConfig() {
+		if (msSince(cfgStamp) > 500) refreshConfig();
+	}
+
+	struct State {
+		Clock::time_point lastClick = Clock::time_point::min();
+		Clock::time_point lastSave = Clock::time_point::min();
+		Clock::time_point lastEval = Clock::time_point::min();
+		bool clicking = false;
+		int saves = 0;
+		bool assisted = false;
+
+		// Prediccion (Principal)
+		bool simulating = false;   // estamos simulando hacia adelante
+		bool simDied = false;      // la simulacion termino en muerte
+		int internalCalls = 0;     // clicks que mete el propio mod
+		int corrections = 0;       // correcciones en este intento
+		bool overriding = false;   // el mod esta invirtiendo tu click ahora mismo
+		bool wasOverriding = false;
+		bool intentDirty = true;   // el jugador cambio de click: evaluar ya
+
+		// Control de costo: la prediccion se auto-limita segun cuanto tarda
+		double costEmaMs = 1.0;
+		double intervalMs = 16.0;
+	};
+	State g;
 
 	bool isHolding(PlayerObject* p) {
 		if (!p) return false;
@@ -56,6 +98,7 @@ class $modify(CFBaseGameLayer, GJBaseGameLayer) {
 			} else {
 				g.clicking = false;
 			}
+			g.intentDirty = true;
 		}
 		GJBaseGameLayer::handleButton(down, button, isPlayer1);
 	}
@@ -67,23 +110,79 @@ class $modify(CFBaseGameLayer, GJBaseGameLayer) {
 		g.internalCalls--;
 	}
 
-	// Simula "frames" pasos con el click en "hold". Devuelve true si sobrevives.
-	bool simulate(PlayLayer* pl, CheckpointObject* cp, bool hold, int frames, float dt) {
+	// Simula "calls" pasos con el click en "hold".
+	// Devuelve cuantos pasos sobrevives (calls = sobrevives todo).
+	int simulate(PlayLayer* pl, CheckpointObject* cp, bool hold, int calls, float dt) {
 		g.simulating = true;
 		g.simDied = false;
 
 		this->modClick(hold);
-		for (int i = 0; i < frames && !g.simDied; i++) {
+		int survived = calls;
+		for (int i = 0; i < calls; i++) {
 			GJBaseGameLayer::update(dt);
+			if (g.simDied) {
+				survived = i;
+				break;
+			}
 		}
 
-		bool ok = !g.simDied;
 		g.simulating = false;
 		g.simDied = false;
 
 		// volvemos al estado real
 		pl->loadFromCheckpoint(cp);
-		return ok;
+		return survived;
+	}
+
+	// Decide si hay que invertir el click del jugador (se llama de vez en cuando, no cada frame)
+	void evaluate(PlayLayer* pl, bool intent, bool aggressive, float dt) {
+		auto t0 = Clock::now();
+
+		// El horizonte ahora esta en milisegundos, asi no depende de los FPS
+		int lookMs = aggressive ? cfg.principalAggressiveMs : cfg.principalBalancedMs;
+		int calls = std::clamp(
+			static_cast<int>(std::ceil(static_cast<float>(lookMs) / (dt * 1000.f))), 1, 40
+		);
+
+		bool before = isHolding(m_player1);
+
+		auto cp = pl->createCheckpoint();
+		if (!cp) return;
+		cp->retain();
+
+		bool wantOverride = false;
+
+		// 1) lo que quiere el jugador, cuanto sobrevive?
+		int a = this->simulate(pl, cp, intent, calls, dt);
+		if (a < calls) {
+			// 2) lo contrario, cuanto sobrevive?
+			int b = this->simulate(pl, cp, !intent, calls, dt);
+			if (b >= calls) {
+				wantOverride = true;            // la alternativa te salva por completo
+			} else if (aggressive && b >= a + 2) {
+				wantOverride = true;            // no te salva, pero aguantas mas (gana tiempo)
+			}
+		}
+
+		cp->release();
+
+		// Por si loadFromCheckpoint no restaura el estado del boton
+		if (isHolding(m_player1) != before) {
+			this->modClick(before);
+		}
+
+		if (wantOverride && !g.overriding && !aggressive &&
+			g.corrections >= cfg.principalBalancedMax) {
+			wantOverride = false;
+		}
+		if (wantOverride && !g.overriding) g.corrections++;
+		if (wantOverride) g.assisted = true;
+		g.overriding = wantOverride;
+
+		// Auto-limite: cuanto mas caro sale evaluar, mas espaciadas son las evaluaciones
+		double costMs = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
+		g.costEmaMs = g.costEmaMs * 0.7 + costMs * 0.3;
+		g.intervalMs = std::clamp(g.costEmaMs * 3.0, 12.0, 100.0);
 	}
 
 	void update(float dt) {
@@ -94,60 +193,41 @@ class $modify(CFBaseGameLayer, GJBaseGameLayer) {
 			return GJBaseGameLayer::update(dt);
 		}
 
-		auto pmode = getPrincipalMode();
-		if (pmode == "Apagado" || dt <= 0.f || dt > 0.1f ||
+		ensureConfig();
+
+		if (cfg.principal == LvOff || dt <= 0.f || dt > 0.1f ||
 			!m_started || !m_player1 || m_player1->m_isDead || m_levelEndAnimationStarted) {
-			return GJBaseGameLayer::update(dt);
-		}
-
-		bool aggressive = (pmode == "Agresivo");
-		int frames = aggressive
-			? static_cast<int>(Mod::get()->getSettingValue<int64_t>("principal-aggressive-frames"))
-			: static_cast<int>(Mod::get()->getSettingValue<int64_t>("principal-balanced-frames"));
-
-		// Lo que el jugador quiere en este momento
-		bool intent = g.clicking;
-		bool current = isHolding(m_player1);
-
-		auto cp = pl->createCheckpoint();
-		if (!cp) {
-			return GJBaseGameLayer::update(dt);
-		}
-		cp->retain();
-
-		bool desired = intent;
-
-		// 1) lo que quiere el jugador, sobrevive?
-		bool intentOk = this->simulate(pl, cp, intent, frames, dt);
-		if (!intentOk) {
-			// 2) lo contrario, sobrevive?
-			bool altOk = this->simulate(pl, cp, !intent, frames, dt);
-			if (altOk) {
-				bool allowed = true;
-				if (!aggressive) {
-					auto maxC = static_cast<int>(Mod::get()->getSettingValue<int64_t>("principal-balanced-max"));
-					if (!g.correcting && g.corrections >= maxC) {
-						allowed = false;
-					}
-				}
-				if (allowed) {
-					if (!g.correcting) {
-						g.corrections++;
-						g.correcting = true;
-					}
-					desired = !intent;
-					g.assisted = true;
-				}
+			// Si estabamos invirtiendo tu click, devolvemos el control al jugador
+			if (g.wasOverriding && m_player1 && !m_player1->m_isDead) {
+				bool intent = g.clicking;
+				if (isHolding(m_player1) != intent) this->modClick(intent);
 			}
-		} else {
-			g.correcting = false;
+			g.overriding = false;
+			g.wasOverriding = false;
+			g.intentDirty = true;
+			return GJBaseGameLayer::update(dt);
 		}
 
-		cp->release();
+		bool aggressive = (cfg.principal == LvAggressive);
+		bool intent = g.clicking;
 
-		// Aplicamos la decision real si es distinta al estado actual
-		if (desired != current) {
-			this->modClick(desired);
+		// Solo evaluamos cuando toca (por tiempo) o cuando el jugador cambio de click
+		bool due = g.intentDirty || static_cast<double>(msSince(g.lastEval)) >= g.intervalMs;
+		if (due) {
+			g.intentDirty = false;
+			g.lastEval = Clock::now();
+			this->evaluate(pl, intent, aggressive, dt);
+		}
+
+		// Aplicamos la decision (solo tocamos el boton si cambia algo)
+		auto setHold = [&](bool h) {
+			if (isHolding(m_player1) != h) this->modClick(h);
+		};
+		if (g.overriding != g.wasOverriding) {
+			setHold(g.overriding ? !intent : intent);
+			g.wasOverriding = g.overriding;
+		} else if (g.overriding) {
+			setHold(!intent);
 		}
 
 		GJBaseGameLayer::update(dt);
@@ -158,11 +238,14 @@ class $modify(CFPlayLayer, PlayLayer) {
 	void resetLevel() {
 		if (g.simulating) return;
 		PlayLayer::resetLevel();
+		refreshConfig();
 		g.saves = 0;
 		g.assisted = false;
 		g.lastSave = Clock::time_point::min();
 		g.corrections = 0;
-		g.correcting = false;
+		g.overriding = false;
+		g.wasOverriding = false;
+		g.intentDirty = true;
 	}
 
 	void destroyPlayer(PlayerObject* player, GameObject* obj) {
@@ -177,22 +260,21 @@ class $modify(CFPlayLayer, PlayLayer) {
 			return PlayLayer::destroyPlayer(player, obj);
 		}
 
-		auto mode = getMode();
-		if (mode == "Apagado") {
+		ensureConfig();
+
+		int mode = cfg.secondary;
+		if (mode == LvOff) {
 			return PlayLayer::destroyPlayer(player, obj);
 		}
 
 		bool shouldSave = false;
 		bool newSaveEvent = msSince(g.lastSave) > 200; // evita contar cada frame
 
-		if (mode == "Agresivo") {
-			bool requireClick = Mod::get()->getSettingValue<bool>("aggressive-require-click");
-			shouldSave = !requireClick || g.clicking || msSince(g.lastClick) <= 600;
+		if (mode == LvAggressive) {
+			shouldSave = !cfg.aggressiveRequireClick || g.clicking || msSince(g.lastClick) <= 600;
 		} else { // Balanceado
-			auto window = Mod::get()->getSettingValue<int64_t>("balanced-window");
-			auto maxSaves = Mod::get()->getSettingValue<int64_t>("balanced-max-saves");
-			shouldSave = msSince(g.lastClick) <= window;
-			if (shouldSave && newSaveEvent && g.saves >= maxSaves) {
+			shouldSave = msSince(g.lastClick) <= cfg.balancedWindow;
+			if (shouldSave && newSaveEvent && g.saves >= cfg.balancedMaxSaves) {
 				shouldSave = false;
 			}
 		}
@@ -209,7 +291,8 @@ class $modify(CFPlayLayer, PlayLayer) {
 
 	void levelComplete() {
 		if (g.simulating) return;
-		if (g.assisted && Mod::get()->getSettingValue<bool>("safe-mode")) {
+		ensureConfig();
+		if (g.assisted && cfg.safeMode) {
 			FLAlertLayer::create(
 				"Click Fix",
 				"Este intento fue <cy>asistido</c>, así que no cuenta como completado.\n"
@@ -240,13 +323,14 @@ class $modify(CFPauseLayer, PauseLayer) {
 	}
 
 	void onClickFix(CCObject*) {
-		auto mode = getPrincipalMode();
+		auto mode = Mod::get()->getSettingValue<std::string>("principal-mode");
 		std::string next = "Balanceado";
 		if (mode == "Apagado") next = "Balanceado";
 		else if (mode == "Balanceado") next = "Agresivo";
 		else next = "Apagado";
 
 		Mod::get()->setSettingValue<std::string>("principal-mode", next);
+		refreshConfig();
 		Notification::create("Click Fix Principal: " + next, NotificationIcon::Success, 1.5f)->show();
 	}
 };
