@@ -16,7 +16,7 @@ jobs:
             os: ubuntu-latest
           - target: Android64
             os: ubuntu-latest
-          - target: Windows
+          - target: Win64
             os: windows-latest
     runs-on: ${{ matrix.config.os }}
     steps:
