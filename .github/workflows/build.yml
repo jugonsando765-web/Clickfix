@@ -22,12 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: geode-sdk/build-geode-mod@main
+        
         with:
           combine: true
-          sdk: latest
-          bindings-ref: 1605f500d053f8de122bf5c7dc6d17c24866e02e
+          sdk: nightly
+          configure-args: -DGEODE_GD_VERSION=2.2081 -DGEODE_COMP_GD_VERSION=22081
           target: ${{ matrix.config.target }}
-
   package:
     needs: build
     runs-on: ubuntu-latest
