@@ -22,14 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: geode-sdk/build-geode-mod@main
-
-with:
+        with:
           combine: true
           sdk: latest
           bindings-ref: 1605f500d053f8de122bf5c7dc6d17c24866e02e
           configure-args: -DSKIP_BUILDING_CODEGEN=OFF
           target: ${{ matrix.config.target }}
-         
+
   package:
     needs: build
     runs-on: ubuntu-latest
