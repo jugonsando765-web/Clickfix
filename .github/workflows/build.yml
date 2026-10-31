@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [Android32, Android64]
+      target: [Android32, Android64, Windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
