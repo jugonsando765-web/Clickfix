@@ -6,7 +6,7 @@
 	},
 	"id": "tuusuario.clickfix",
 	"name": "Click Fix",
-	"version": "v1.2.0",
+	"version": "v1.3.0",
 	"developer": "TuUsuario",
 	"description": "Principal: predice hacia dónde vas y corrige tu click. Secundario: te salva atravesando el obstáculo.",
 	"settings": {
@@ -20,6 +20,15 @@
 			"type": "string",
 			"default": "Apagado",
 			"one-of": ["Apagado", "Balanceado", "Agresivo"]
+		},
+		"principal-click-window-ms": {
+			"name": "Principal: solo corregir cerca de tus clicks (ms)",
+			"description": "Para que se vea natural: solo ayuda mientras clickeas o hasta este tiempo después de clickear o soltar. Así ajusta TU click en vez de inventar saltos, y no gasta rendimiento el resto del tiempo. 0 = sin límite (menos natural).",
+			"type": "int",
+			"default": 150,
+			"min": 0,
+			"max": 1000,
+			"control": { "slider": true, "input": true }
 		},
 		"principal-balanced-ms": {
 			"name": "Principal Balanceado: anticipación (ms)",
