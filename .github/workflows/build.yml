@@ -11,15 +11,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-      target: [Android32, Android64, Windows]
-    runs-on: ubuntu-latest
+        config:
+          - target: Android32
+            os: ubuntu-latest
+          - target: Android64
+            os: ubuntu-latest
+          - target: Windows
+            os: windows-latest
+    runs-on: ${{ matrix.config.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: geode-sdk/build-geode-mod@main
         with:
           combine: true
           sdk: nightly
-          target: ${{ matrix.target }}
+          target: ${{ matrix.config.target }}
 
   package:
     needs: build
