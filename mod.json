@@ -6,19 +6,61 @@
 	},
 	"id": "tuusuario.clickfix",
 	"name": "Click Fix",
-	"version": "v1.0.0",
+	"version": "v1.1.0",
 	"developer": "TuUsuario",
-	"description": "Corrige clicks y spam en todos los vehículos. Modos: Agresivo y Balanceado.",
+	"description": "Principal: predice hacia dónde vas y corrige tu click. Secundario: te salva atravesando el obstáculo.",
 	"settings": {
-		"mode": {
-			"name": "Modo",
-			"description": "Apagado: sin ayuda. Balanceado: te corrige un poco, sigues dependiendo de ti. Agresivo: aunque espamees no mueres.",
+		"title-principal": {
+			"type": "title",
+			"name": "PRINCIPAL - Corregir click (predice)"
+		},
+		"principal-mode": {
+			"name": "Principal: modo",
+			"description": "Apagado: sin ayuda. Balanceado: corrige solo cuando vas a morir muy pronto y con límite por intento, dependes de ti. Agresivo: mira más lejos y corrige casi siempre, aunque espamees.",
 			"type": "string",
-			"default": "Balanceado",
+			"default": "Apagado",
+			"one-of": ["Apagado", "Balanceado", "Agresivo"]
+		},
+		"principal-balanced-frames": {
+			"name": "Principal Balanceado: frames que mira adelante",
+			"description": "Cuántos frames mira hacia adelante. Más bajo = corrige más tarde y dependes más de ti.",
+			"type": "int",
+			"default": 4,
+			"min": 1,
+			"max": 20,
+			"control": { "slider": true, "input": true }
+		},
+		"principal-balanced-max": {
+			"name": "Principal Balanceado: correcciones por intento",
+			"description": "Máximo de veces que te corrige en un mismo intento.",
+			"type": "int",
+			"default": 5,
+			"min": 1,
+			"max": 50,
+			"control": { "slider": true, "input": true }
+		},
+		"principal-aggressive-frames": {
+			"name": "Principal Agresivo: frames que mira adelante",
+			"description": "Cuántos frames mira hacia adelante. Más alto = corrige mejor pero puede ir más lento.",
+			"type": "int",
+			"default": 15,
+			"min": 2,
+			"max": 40,
+			"control": { "slider": true, "input": true }
+		},
+		"title-secundario": {
+			"type": "title",
+			"name": "SECUNDARIO - Atravesar (no mueres)"
+		},
+		"mode": {
+			"name": "Secundario: modo",
+			"description": "Apagado: sin ayuda. Balanceado: te salva un poco atravesando. Agresivo: aunque espamees no mueres.",
+			"type": "string",
+			"default": "Apagado",
 			"one-of": ["Apagado", "Balanceado", "Agresivo"]
 		},
 		"balanced-window": {
-			"name": "Balanceado: ventana de click (ms)",
+			"name": "Secundario Balanceado: ventana de click (ms)",
 			"description": "Solo te salva si hiciste click hace menos de este tiempo.",
 			"type": "int",
 			"default": 120,
@@ -27,8 +69,8 @@
 			"control": { "slider": true, "input": true }
 		},
 		"balanced-max-saves": {
-			"name": "Balanceado: salvadas por intento",
-			"description": "Máximo de veces que te corrige en un mismo intento.",
+			"name": "Secundario Balanceado: salvadas por intento",
+			"description": "Máximo de veces que te salva en un mismo intento.",
 			"type": "int",
 			"default": 3,
 			"min": 1,
@@ -36,14 +78,18 @@
 			"control": { "slider": true, "input": true }
 		},
 		"aggressive-require-click": {
-			"name": "Agresivo: requiere estar clickeando",
-			"description": "Si está activo, el modo agresivo solo te salva mientras espameas. Si no, te salva siempre.",
+			"name": "Secundario Agresivo: requiere estar clickeando",
+			"description": "Si está activo, solo te salva mientras espameas. Si no, te salva siempre.",
 			"type": "bool",
 			"default": true
 		},
+		"title-general": {
+			"type": "title",
+			"name": "GENERAL"
+		},
 		"safe-mode": {
 			"name": "Modo seguro",
-			"description": "Los intentos asistidos no cuentan al completar el nivel (no se guarda progreso).",
+			"description": "Los intentos asistidos (con principal o secundario) no cuentan al completar el nivel (no se guarda progreso).",
 			"type": "bool",
 			"default": true
 		}
