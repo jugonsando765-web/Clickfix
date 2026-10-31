@@ -24,7 +24,8 @@ jobs:
       - uses: geode-sdk/build-geode-mod@main
         with:
           combine: true
-          sdk: nightly
+          sdk: latest
+          bindings-ref: 1605f500d053f8de122bf5c7dc6d17c24866e02e
           target: ${{ matrix.config.target }}
 
   package:
