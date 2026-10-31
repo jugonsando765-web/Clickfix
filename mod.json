@@ -6,7 +6,7 @@
 	},
 	"id": "tuusuario.clickfix",
 	"name": "Click Fix",
-	"version": "v1.1.0",
+	"version": "v1.2.0",
 	"developer": "TuUsuario",
 	"description": "Principal: predice hacia dónde vas y corrige tu click. Secundario: te salva atravesando el obstáculo.",
 	"settings": {
@@ -21,13 +21,13 @@
 			"default": "Apagado",
 			"one-of": ["Apagado", "Balanceado", "Agresivo"]
 		},
-		"principal-balanced-frames": {
-			"name": "Principal Balanceado: frames que mira adelante",
-			"description": "Cuántos frames mira hacia adelante. Más bajo = corrige más tarde y dependes más de ti.",
+		"principal-balanced-ms": {
+			"name": "Principal Balanceado: anticipación (ms)",
+			"description": "Cuántos milisegundos mira hacia adelante. Más bajo = corrige más tarde, dependes más de ti, y gasta menos rendimiento.",
 			"type": "int",
-			"default": 4,
-			"min": 1,
-			"max": 20,
+			"default": 60,
+			"min": 16,
+			"max": 300,
 			"control": { "slider": true, "input": true }
 		},
 		"principal-balanced-max": {
@@ -39,13 +39,13 @@
 			"max": 50,
 			"control": { "slider": true, "input": true }
 		},
-		"principal-aggressive-frames": {
-			"name": "Principal Agresivo: frames que mira adelante",
-			"description": "Cuántos frames mira hacia adelante. Más alto = corrige mejor pero puede ir más lento.",
+		"principal-aggressive-ms": {
+			"name": "Principal Agresivo: anticipación (ms)",
+			"description": "Cuántos milisegundos mira hacia adelante. Más alto = corrige mejor pero gasta más rendimiento.",
 			"type": "int",
-			"default": 15,
-			"min": 2,
-			"max": 40,
+			"default": 120,
+			"min": 30,
+			"max": 400,
 			"control": { "slider": true, "input": true }
 		},
 		"title-secundario": {
