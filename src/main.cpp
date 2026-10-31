@@ -31,10 +31,6 @@ namespace {
 
 // Registra los clicks (funciona para todos los vehículos y modo dual)
 class $modify(CFBaseGameLayer, GJBaseGameLayer) {
-	bool canBeActivatedByPlayer(PlayerObject* p, EffectGameObject* e) {
-		return GJBaseGameLayer::canBeActivatedByPlayer(p, e);
-	}
-
 	void handleButton(bool down, int button, bool isPlayer1) {
 		if (down) {
 			g.lastClick = Clock::now();
